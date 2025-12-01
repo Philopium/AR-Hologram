@@ -1,6 +1,7 @@
-import * as THREE from 'three';
-import { MindARThree } from 'mindar-image-three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+// Usa URL completi invece di nomi di moduli
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
+import { MindARThree } from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js';
 
 // Configuration
 const MODEL_URL = './models/model.glb'; // drop your model here
