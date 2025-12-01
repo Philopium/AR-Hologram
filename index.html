@@ -3,80 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover" />
-  <title>AR Demo - Debug</title>
+  <title>AR Demo - Seamless GLTF Loop</title>
   
   <style>
-    html,body{height:100%;margin:0;background:#000;color:#fff;font-family:monospace;}
+    html,body{height:100%;margin:0;background:#000;}
     #ar-container { position: fixed; inset: 0; overflow: hidden; }
-    #debug { position: fixed; top: 10px; left: 10px; z-index: 9999; background: rgba(0,0,0,0.8); padding: 10px; max-width: 90%; max-height: 50%; overflow: auto; font-size: 12px; }
     video, canvas { width:100%; height:100%; object-fit: cover; display: block; }
   </style>
 </head>
 <body>
-  <div id="debug">Inizializzazione...</div>
   <div id="ar-container"></div>
 
-  <script type="module">
-    const debug = document.getElementById('debug');
-    function log(msg) {
-      console.log(msg);
-      debug.innerHTML += '<br>' + msg;
-    }
-
-    // Cattura errori globali
-    window.onerror = (msg, url, line, col, error) => {
-      log('❌ ERRORE: ' + msg + ' at ' + url + ':' + line);
-      return false;
-    };
-
-    try {
-      log('✓ Script caricato');
-      
-      // Test import Three.js
-      log('Caricamento Three.js...');
-      const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js');
-      log('✓ Three.js caricato: ' + (THREE.Scene ? 'OK' : 'FAIL'));
-      
-      // Test import GLTFLoader
-      log('Caricamento GLTFLoader...');
-      const { GLTFLoader } = await import('https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js');
-      log('✓ GLTFLoader caricato: ' + (GLTFLoader ? 'OK' : 'FAIL'));
-      
-      // Test import MindAR
-      log('Caricamento MindAR...');
-      const { MindARThree } = await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js');
-      log('✓ MindAR caricato: ' + (MindARThree ? 'OK' : 'FAIL'));
-      
-      // Test file targets
-      log('Verifica targets.mind...');
-      const targetsRes = await fetch('./targets/targets.mind');
-      log('✓ targets.mind: ' + targetsRes.status + ' (' + targetsRes.statusText + ')');
-      
-      // Test file model
-      log('Verifica model.glb...');
-      const modelRes = await fetch('./models/model.glb');
-      log('✓ model.glb: ' + modelRes.status + ' (' + modelRes.statusText + ')');
-      
-      // Test permessi camera
-      log('Richiesta permessi camera...');
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      log('✓ Camera autorizzata');
-      stream.getTracks().forEach(track => track.stop());
-      
-      log('<br>=============================');
-      log('✅ TUTTO OK! Carico app vera...');
-      log('=============================');
-      
-      // Se arriviamo qui, carichiamo l\'app vera
-      setTimeout(() => {
-        debug.style.display = 'none';
-        import('./app/main.js');
-      }, 2000);
-      
-    } catch(err) {
-      log('❌ ERRORE CRITICO: ' + err.message);
-      log('Stack: ' + err.stack);
-    }
-  </script>
+  <script type="module" src="./app/main.js"></script>
 </body>
 </html>
