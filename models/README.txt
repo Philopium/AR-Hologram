@@ -1,0 +1,1 @@
+Drop your glTF/.glb model file here as 'model.glb' (or update MODEL_URL in app/main.js).

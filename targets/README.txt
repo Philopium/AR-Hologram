@@ -1,0 +1,1 @@
+Place your generated MindAR target file here as 'targets.mind'. See README.md for instructions.
