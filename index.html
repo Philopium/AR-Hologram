@@ -6,72 +6,109 @@
   <title>AR Demo - GLTF</title>
   <style>
     html, body { margin:0; padding:0; height:100%; background:#000; overflow:hidden; }
-    #ar-container { width:100%; height:100%; }
+    #ar-container { width:100%; height:100%; position:relative; }
     #start-btn { 
       position: absolute; top:50%; left:50%; transform:translate(-50%,-50%);
       padding: 20px 40px; font-size:18px; border:none; border-radius:10px; cursor:pointer;
+      z-index: 1000; background:white; color:#333;
+    }
+    #loading { 
+      position:absolute; top:10%; left:50%; transform:translateX(-50%); 
+      color:white; font-family:sans-serif; display:none;
+    }
+    #error {
+      position:absolute; bottom:10%; left:50%; transform:translateX(-50%);
+      color:#ff6b6b; font-family:sans-serif; display:none;
     }
   </style>
 </head>
 <body>
   <div id="ar-container"></div>
   <button id="start-btn">Avvia AR</button>
+  <div id="loading">Caricamento...</div>
+  <div id="error"></div>
 
-  <script type="module">
-    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
-    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
-    import { MindARThree } from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js';
+  <!-- Librerie UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
 
+  <script>
     const startBtn = document.getElementById('start-btn');
-    const arContainer = document.getElementById('ar-container');
+    const container = document.getElementById('ar-container');
+    const loadingDiv = document.getElementById('loading');
+    const errorDiv = document.getElementById('error');
 
     startBtn.addEventListener('click', async () => {
       startBtn.style.display = 'none';
-
-      // Inizializza MindAR
-      const mindarThree = new MindARThree({
-        container: arContainer,
-        imageTargetSrc: './targets/targets.mind', // percorso relativo a index.html
-        uiScanning: 'yes',
-        uiLoading: 'yes',
-        maxTrack: 1,
-      });
-
-      const {renderer, scene, camera} = mindarThree;
-
-      // Luci base
-      const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
-      scene.add(light);
-
-      // Aggiungi anchor
-      const anchor = mindarThree.addAnchor(0);
-
-      // Carica modello GLTF
-      const loader = new GLTFLoader();
-      let mixer = null;
+      loadingDiv.style.display = 'block';
+      loadingDiv.textContent = 'Richiesta permessi camera...';
 
       try {
-        const gltf = await loader.loadAsync('./models/model.glb'); // percorso relativo
-        anchor.group.add(gltf.scene);
+        // Chiedi permessi camera
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        stream.getTracks().forEach(track => track.stop());
 
-        if (gltf.animations && gltf.animations.length) {
-          mixer = new THREE.AnimationMixer(gltf.scene);
-          gltf.animations.forEach(clip => mixer.clipAction(clip).play());
-        }
+        loadingDiv.textContent = 'Inizializzazione AR...';
+
+        // Inizializza MindAR
+        const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+          container: container,
+          imageTargetSrc: './targets/targets.mind',
+          uiScanning: 'yes',
+          uiLoading: 'yes',
+          maxTrack: 1
+        });
+
+        const { renderer, scene, camera } = mindarThree;
+
+        // Luci
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+        scene.add(hemiLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.set(0, 1, 0);
+        scene.add(dirLight);
+
+        // Anchor
+        const anchor = mindarThree.addAnchor(0);
+
+        // Carica modello
+        loadingDiv.textContent = 'Caricamento modello 3D...';
+        const loader = new THREE.GLTFLoader();
+        loader.load('./models/model.glb',
+          function(gltf){
+            anchor.group.add(gltf.scene);
+            loadingDiv.style.display = 'none';
+          },
+          undefined,
+          function(err){
+            console.error(err);
+            loadingDiv.style.display = 'none';
+            errorDiv.style.display = 'block';
+            errorDiv.textContent = 'Errore caricamento modello';
+          }
+        );
+
+        // Avvia AR
+        await mindarThree.start();
+
+        const clock = new THREE.Clock();
+        renderer.setAnimationLoop(() => {
+          renderer.render(scene, camera);
+        });
+
       } catch(err) {
-        console.error('Errore caricamento modello:', err);
+        console.error(err);
+        loadingDiv.style.display = 'none';
+        errorDiv.style.display = 'block';
+        if(err.name === 'NotAllowedError'){
+          errorDiv.textContent = 'Permesso camera negato';
+        } else if(err.name === 'NotFoundError'){
+          errorDiv.textContent = 'Camera non trovata';
+        } else {
+          errorDiv.textContent = 'Errore: ' + err.message;
+        }
       }
-
-      // Avvia MindAR
-      await mindarThree.start();
-
-      const clock = new THREE.Clock();
-
-      renderer.setAnimationLoop(() => {
-        const delta = clock.getDelta();
-        if (mixer) mixer.update(delta);
-        renderer.render(scene, camera);
-      });
     });
   </script>
 </body>
