@@ -6,14 +6,295 @@
   <title>AR Demo - Seamless GLTF Loop</title>
   
   <style>
-    html,body{height:100%;margin:0;background:#000;}
+    html,body{height:100%;margin:0;background:#000;overflow:hidden;}
     #ar-container { position: fixed; inset: 0; overflow: hidden; }
     video, canvas { width:100%; height:100%; object-fit: cover; display: block; }
+    
+    /* Schermata iniziale con pulsante per chiedere permessi */
+    #start-screen {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      color: white;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    #start-screen h1 {
+      font-size: 2em;
+      margin-bottom: 0.5em;
+    }
+    
+    #start-screen p {
+      margin-bottom: 2em;
+      opacity: 0.9;
+      max-width: 400px;
+    }
+    
+    #start-btn {
+      background: white;
+      color: #667eea;
+      border: none;
+      padding: 15px 40px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    #start-btn:active {
+      transform: scale(0.95);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    
+    #loading {
+      margin-top: 20px;
+      font-size: 14px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    
+    #loading.show {
+      opacity: 1;
+    }
+    
+    #error {
+      color: #ff6b6b;
+      background: rgba(255,255,255,0.2);
+      padding: 15px;
+      border-radius: 10px;
+      margin-top: 20px;
+      display: none;
+      max-width: 400px;
+    }
   </style>
 </head>
 <body>
-  <div id="ar-container"></div>
+  <div id="start-screen">
+    <h1>🎯 AR Experience</h1>
+    <p>Inquadra il target per vedere il modello 3D in realtà aumentata</p>
+    <button id="start-btn">Avvia Camera</button>
+    <div id="loading">Caricamento in corso...</div>
+    <div id="error"></div>
+  </div>
+  
+  <div id="ar-container" style="display:none;"></div>
 
-  <script type="module" src="./app/main.js"></script>
+  <script type="module">
+    const startScreen = document.getElementById('start-screen');
+    const startBtn = document.getElementById('start-btn');
+    const loading = document.getElementById('loading');
+    const errorDiv = document.getElementById('error');
+    const arContainer = document.getElementById('ar-container');
+    
+    function showError(msg) {
+      errorDiv.textContent = msg;
+      errorDiv.style.display = 'block';
+      loading.classList.remove('show');
+      startBtn.style.display = 'block';
+    }
+    
+    startBtn.addEventListener('click', async () => {
+      startBtn.style.display = 'none';
+      loading.classList.add('show');
+      errorDiv.style.display = 'none';
+      
+      try {
+        // Step 1: Richiedi esplicitamente i permessi camera
+        loading.textContent = 'Richiesta permessi camera...';
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } 
+        });
+        
+        // Ferma subito lo stream, MindAR ne creerà uno suo
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Step 2: Carica le librerie
+        loading.textContent = 'Caricamento librerie AR...';
+        
+        const [THREE, { GLTFLoader }, { MindARThree }] = await Promise.all([
+          import('https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js'),
+          import('https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js'),
+          import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js')
+        ]);
+        
+        loading.textContent = 'Inizializzazione AR...';
+        
+        // Step 3: Nascondi schermata iniziale e mostra AR
+        startScreen.style.display = 'none';
+        arContainer.style.display = 'block';
+        
+        // Step 4: Inizializza MindAR
+        const mindarThree = new MindARThree({
+          container: arContainer,
+          imageTargetSrc: './targets/targets.mind',
+          uiScanning: 'yes', // Mostra UI per aiutare l'utente
+          uiLoading: 'yes',
+          maxTrack: 1,
+        });
+
+        const {renderer, scene, camera} = mindarThree;
+
+        // Luci
+        const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.9);
+        scene.add(hemi);
+        const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+        dir.position.set(0, 1, 0);
+        scene.add(dir);
+
+        const anchor = mindarThree.addAnchor(0);
+        const visualGroup = new THREE.Group();
+        visualGroup.visible = false;
+        scene.add(visualGroup);
+
+        // Carica modello
+        const loader = new GLTFLoader();
+        let mixer = null;
+
+        try {
+          const gltf = await loader.loadAsync('./models/model.glb');
+          visualGroup.add(gltf.scene);
+
+          const box = new THREE.Box3().setFromObject(gltf.scene);
+          const size = new THREE.Vector3();
+          box.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z);
+          if (maxDim > 0) {
+            const scale = 0.5 / maxDim;
+            gltf.scene.scale.setScalar(scale);
+          }
+
+          if (gltf.animations && gltf.animations.length) {
+            mixer = new THREE.AnimationMixer(gltf.scene);
+            gltf.animations.forEach(clip => {
+              const action = mixer.clipAction(clip);
+              action.loop = THREE.LoopRepeat;
+              action.play();
+            });
+          }
+        } catch(err) {
+          console.error('Model load error:', err);
+        }
+
+        // Smoothing setup
+        const TRANSFORM_SMOOTHING = 0.15;
+        const LUMINANCE_SMOOTHING = 0.08;
+        const SAMPLE_SIZE = 32;
+        
+        const sampleCanvas = document.createElement('canvas');
+        sampleCanvas.width = SAMPLE_SIZE;
+        sampleCanvas.height = SAMPLE_SIZE;
+        const sampleCtx = sampleCanvas.getContext('2d');
+
+        let smoothedLuminance = 0.8;
+        let smoothedColor = new THREE.Color(1,1,1);
+
+        function sampleVideoFrame(videoElem) {
+          try {
+            if (videoElem.readyState < 2) return null;
+            sampleCtx.drawImage(videoElem, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
+            const data = sampleCtx.getImageData(0,0,SAMPLE_SIZE,SAMPLE_SIZE).data;
+            let r=0,g=0,b=0;
+            const pxCount = SAMPLE_SIZE*SAMPLE_SIZE;
+            for (let i=0;i<data.length;i+=4){
+              r += data[i];
+              g += data[i+1];
+              b += data[i+2];
+            }
+            r /= pxCount; g /= pxCount; b /= pxCount;
+            const lum = (0.2126*r + 0.7152*g + 0.0722*b)/255;
+            return { r: r/255, g: g/255, b: b/255, lum };
+          } catch(e){
+            return null;
+          }
+        }
+
+        const targetPos = new THREE.Vector3();
+        const targetQuat = new THREE.Quaternion();
+        const currentPos = new THREE.Vector3();
+        const currentQuat = new THREE.Quaternion();
+
+        await mindarThree.start();
+        const videoElem = document.querySelector('#ar-container video') || document.querySelector('video');
+
+        visualGroup.visible = false;
+        const clock = new THREE.Clock();
+
+        renderer.setAnimationLoop(() => {
+          const delta = clock.getDelta();
+          if (mixer) mixer.update(delta);
+
+          if (anchor.group.visible) {
+            anchor.group.getWorldPosition(targetPos);
+            anchor.group.getWorldQuaternion(targetQuat);
+
+            if (!visualGroup.visible) {
+              visualGroup.position.copy(targetPos);
+              visualGroup.quaternion.copy(targetQuat);
+              visualGroup.visible = true;
+              currentPos.copy(targetPos);
+              currentQuat.copy(targetQuat);
+            } else {
+              currentPos.lerp(targetPos, TRANSFORM_SMOOTHING);
+              currentQuat.slerp(targetQuat, TRANSFORM_SMOOTHING);
+              visualGroup.position.copy(currentPos);
+              visualGroup.quaternion.copy(currentQuat);
+            }
+          }
+
+          if (videoElem) {
+            const sample = sampleVideoFrame(videoElem);
+            if (sample) {
+              smoothedLuminance = smoothedLuminance * (1 - LUMINANCE_SMOOTHING) + sample.lum * LUMINANCE_SMOOTHING;
+              smoothedColor.r = smoothedColor.r * (1 - LUMINANCE_SMOOTHING) + sample.r * LUMINANCE_SMOOTHING;
+              smoothedColor.g = smoothedColor.g * (1 - LUMINANCE_SMOOTHING) + sample.g * LUMINANCE_SMOOTHING;
+              smoothedColor.b = smoothedColor.b * (1 - LUMINANCE_SMOOTHING) + sample.b * LUMINANCE_SMOOTHING;
+
+              const ambientMin = 0.25;
+              const ambientMax = 1.4;
+              const ambientIntensity = ambientMin + (ambientMax - ambientMin) * Math.min(Math.max(smoothedLuminance, 0), 1);
+
+              hemi.intensity = ambientIntensity;
+              hemi.color.setRGB(smoothedColor.r, smoothedColor.g, smoothedColor.b);
+              dir.color.setRGB(Math.max(smoothedColor.r*1.1, 0.8*smoothedColor.r),
+                               Math.max(smoothedColor.g*1.05, 0.8*smoothedColor.g),
+                               Math.max(smoothedColor.b*1.0, 0.8*smoothedColor.b));
+              dir.intensity = 0.2 + smoothedLuminance * 1.2;
+            }
+          }
+
+          renderer.render(scene, camera);
+        });
+
+        const stop = async () => {
+          try { await mindarThree.stop(); } catch(e){}
+        };
+        window.addEventListener('pagehide', stop);
+        window.addEventListener('beforeunload', stop);
+        
+      } catch(err) {
+        console.error('Error:', err);
+        if (err.name === 'NotAllowedError') {
+          showError('❌ Permesso camera negato. Ricarica la pagina e concedi l\'accesso alla camera.');
+        } else if (err.name === 'NotFoundError') {
+          showError('❌ Nessuna camera trovata sul dispositivo.');
+        } else {
+          showError('❌ Errore: ' + err.message);
+        }
+      }
+    });
+  </script>
 </body>
 </html>
