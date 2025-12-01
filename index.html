@@ -51,8 +51,8 @@
 
         loadingDiv.textContent = 'Inizializzazione AR...';
 
-        // Inizializza MindAR
-        const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+        // Inizializza MindAR (UMD globale)
+        const mindarThree = new MindAR.MindARThree({
           container: container,
           imageTargetSrc: './targets/targets.mind',
           uiScanning: 'yes',
@@ -62,17 +62,17 @@
 
         const { renderer, scene, camera } = mindarThree;
 
-        // Luci
+        // Luci base
         const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
         scene.add(hemiLight);
         const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
         dirLight.position.set(0, 1, 0);
         scene.add(dirLight);
 
-        // Anchor
+        // Anchor per modello
         const anchor = mindarThree.addAnchor(0);
 
-        // Carica modello
+        // Carica modello GLTF
         loadingDiv.textContent = 'Caricamento modello 3D...';
         const loader = new THREE.GLTFLoader();
         loader.load('./models/model.glb',
